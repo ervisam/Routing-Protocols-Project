@@ -1,0 +1,237 @@
+ervisa@J1# show 
+## Last changed: 2023-08-22 18:25:28 CEST
+version 12.1X47-D15.4;
+system {
+    host-name J1;
+    time-zone Europe/Rome;
+    root-authentication {
+        encrypted-password "$1$srwdGpNB$oeu4X3sqVq3WaAI8TFPSb0"; ## SECRET-DATA
+    }
+    login {
+        user ervisa {
+            uid 2000;
+            class super-user;
+            authentication {
+                encrypted-password "$1$.5z00fma$.pvt7sDt8DGQBN995NDUC0"; ## SECRET-DATA
+            }
+        }
+    }
+    services {
+        ftp;
+        ssh;
+        telnet;
+        web-management {
+            http {                      
+                interface ge-0/0/0.0;
+            }
+        }
+    }
+    syslog {
+        user * {
+            any emergency;
+        }
+        file messages {
+            any any;
+            authorization info;
+        }
+        file interactive-commands {
+            interactive-commands any;
+        }
+    }
+    license {
+        autoupdate {
+            url https://ae1.juniper.net/junos/key_retrieval;
+        }
+    }
+}
+interfaces {                            
+    ge-0/0/0 {
+        unit 0;
+    }
+    ge-0/0/1 {
+        unit 0 {
+            family inet {
+                address 192.168.5.21/30;
+            }
+        }
+    }
+    ge-0/0/2 {
+        unit 0 {
+            family inet {
+                filter {
+                    input-list [ classify-traffic cos-markings ];
+                }
+                address 192.168.5.1/30;
+            }
+        }
+    }
+    ge-0/0/3 {
+        unit 0 {
+            family inet {               
+                filter {
+                    input-list [ classify-traffic cos-markings ];
+                }
+                address 192.168.5.25/30;
+            }
+        }
+    }
+    ge-0/0/5 {
+        unit 0 {
+            family inet {
+                address 192.168.10.1/24;
+            }
+        }
+    }
+    lo0 {
+        unit 0 {
+            family inet {
+                address 192.168.6.1/32;
+            }
+        }
+    }
+}
+protocols {                             
+    ospf {
+        area 0.0.0.1 {
+            interface ge-0/0/2.0;
+            interface ge-0/0/3.0;
+        }
+        area 0.0.0.0 {
+            interface ge-0/0/1.0;
+            interface lo0.0;
+        }
+    }
+}
+class-of-service {
+    forwarding-classes {
+        queue 0 best-effort;
+        queue 1 video;
+        queue 2 premium;
+        queue 3 Network-control;
+    }
+    interfaces {
+        ge-0/0/1 {
+            scheduler-map map-sched;
+            unit 0 {
+                classifiers {           
+                    inet-precedence default;
+                }
+            }
+        }
+        ge-0/0/2 {
+            scheduler-map map-sched;
+        }
+        ge-0/0/3 {
+            scheduler-map map-sched;
+        }
+    }
+    scheduler-maps {
+        map-sched {
+            forwarding-class best-effort scheduler sched-BE;
+            forwarding-class video scheduler sched-VIDEO;
+            forwarding-class premium scheduler sched-PREMIUM;
+            forwarding-class Network-control scheduler sched-NETW_CONT;
+        }
+    }
+    schedulers {
+        sched-BE {
+            transmit-rate percent 50;
+            buffer-size percent 50;     
+            priority low;
+        }
+        sched-VIDEO {
+            transmit-rate percent 30;
+            buffer-size percent 30;
+            priority high;
+        }
+        sched-PREMIUM {
+            transmit-rate percent 15;
+            buffer-size percent 15;
+            priority medium-low;
+        }
+        sched-NETW_CONT {
+            transmit-rate percent 5;
+            buffer-size percent 5;
+            priority medium-high;
+        }
+    }
+}
+security {
+    forwarding-options {
+        family {
+            mpls {                      
+                mode packet-based;
+            }
+        }
+    }
+}
+firewall {
+    family inet {
+        filter classify-traffic {
+            term video_lan2 {
+                from {
+                    source-address {
+                        192.168.2.110/32;
+                        192.168.2.100/32;
+                    }
+                    protocol udp;
+                    destination-port 10001;
+                }
+                then {
+                    forwarding-class video;
+                    accept;
+                }
+            }
+            term premium_lan2 {         
+                from {
+                    source-address {
+                        192.168.2.0/24;
+                        192.168.2.100/32 except;
+                        192.168.2.110/32 except;
+                    }
+                }
+                then {
+                    forwarding-class premium;
+                    accept;
+                }
+            }
+            term accept-all {
+                then accept;
+            }
+        }
+        filter cos-markings {
+            term b_effort {
+                from {
+                    source-address {
+                        192.168.1.10/32;
+                    }
+                    destination-address {
+                        192.168.3.10/32;
+                    }
+                    protocol tcp;
+                    port 8080;
+                }
+                then {
+                    policer best-effort-traffic-policer;
+                    forwarding-class premium;
+                    accept;
+                }
+            }
+            term all-other-traffic {
+                then accept;
+            }
+        }
+    }
+    policer best-effort-traffic-policer {
+        if-exceeding {
+            bandwidth-limit 100m;
+            burst-size-limit 15k;
+        }
+        then forwarding-class best-effort;
+    }                                   
+}
+
+[edit]
+ervisa@J1# 
+
+
